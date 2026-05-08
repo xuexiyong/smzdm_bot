@@ -71,24 +71,40 @@ def send_wecom(webhook: str, title: str, content: str) -> bool:
     return False
 
 
-def send_telegram(token: str, chat_id: str, title: str, content: str, api_base: str = "") -> bool:
-    """Send via Telegram Bot."""
+def send_telegram(
+    token: str,
+    chat_id: str,
+    title: str,
+    content: str,
+    api_base: str = "",
+    topic_id: str = "",
+) -> bool:
+    """Send via Telegram Bot.
+
+    chat_id can be a user ID, group ID, or channel chat ID.
+    topic_id is Telegram forum topic ID (message_thread_id).
+    """
     if not token or not chat_id:
         return False
 
     base = api_base.rstrip("/") if api_base else "https://api.telegram.org"
     url = f"{base}/bot{token}/sendMessage"
 
+    payload = {
+        "chat_id": chat_id,
+        "text": f"*{title}*\n\n{content}",
+        "parse_mode": "Markdown",
+    }
+
+    if topic_id:
+        try:
+            payload["message_thread_id"] = int(topic_id)
+        except ValueError:
+            logger.warning(f"Invalid Telegram topic ID: {topic_id}")
+            return False
+
     try:
-        resp = httpx.post(
-            url,
-            json={
-                "chat_id": chat_id,
-                "text": f"*{title}*\n\n{content}",
-                "parse_mode": "Markdown",
-            },
-            timeout=TIMEOUT,
-        )
+        resp = httpx.post(url, json=payload, timeout=TIMEOUT)
         if resp.json().get("ok"):
             logger.success("✅ Telegram: sent")
             return True
@@ -121,9 +137,13 @@ def send_notification(config: NotifyConfig, title: str, content: str) -> int:
 
     if config.tg_bot_token and config.tg_user_id:
         count += send_telegram(
-            config.tg_bot_token, config.tg_user_id, title, content, config.tg_api_base
+            config.tg_bot_token,
+            config.tg_user_id,
+            title,
+            content,
+            config.tg_api_base,
+            config.tg_topic_id,
         )
 
     logger.info(f"Notifications: {count} sent")
     return count
-
